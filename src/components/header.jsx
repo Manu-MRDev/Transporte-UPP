@@ -10,7 +10,7 @@ export function Header() {
             <div className="bg-primary text-primary-foreground p-2 rounded-lg">
               <Bus className="h-6 w-6" />
             </div>
-            <span className="font-bold text-xl">Transporte UPP</span>
+            <span className="font-bold text-xl">PotroBus</span>
           </div>
 
           <nav className="hidden md:flex items-center gap-6">
