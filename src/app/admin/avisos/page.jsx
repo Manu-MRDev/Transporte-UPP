@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Table } from "@/components/Table"
 import { Modal } from "@/components/Modal"
 import { Toast } from "@/components/Toast"
@@ -10,12 +10,11 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 
+import { db } from "@/lib/firebase"
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore"
+
 export default function AvisosPage() {
-  const [avisos, setAvisos] = useState([
-    { id: "1", title: "Cambio de horario", message: "Nueva salida 7:30 AM", priority: "info" },
-    { id: "2", title: "Mantenimiento Ruta B", message: "Servicio suspendido hasta las 3 PM", priority: "warning" },
-    { id: "3", title: "Evento deportivo", message: "Servicio adicional disponible", priority: "success" },
-  ])
+  const [avisos, setAvisos] = useState([])
   const [loading, setLoading] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingAviso, setEditingAviso] = useState(null)
@@ -26,6 +25,23 @@ export default function AvisosPage() {
     message: "",
     priority: "info",
   })
+
+  // 🔥 Cargar avisos desde Firestore
+  useEffect(() => {
+    async function loadAvisos() {
+      setLoading(true)
+      try {
+        const snapshot = await getDocs(collection(db, "avisos"))
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        setAvisos(data)
+      } catch (error) {
+        console.error(error)
+        setToast({ message: "Error cargando avisos", type: "error" })
+      }
+      setLoading(false)
+    }
+    loadAvisos()
+  }, [])
 
   const handleOpenModal = (aviso) => {
     if (aviso) {
@@ -42,21 +58,38 @@ export default function AvisosPage() {
     setIsModalOpen(true)
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    if (editingAviso) {
-      setAvisos(avisos.map((a) => (a.id === editingAviso.id ? { ...a, ...formData } : a)))
-      setToast({ message: "Aviso actualizado", type: "success" })
-    } else {
-      setAvisos([...avisos, { id: Date.now().toString(), ...formData }])
-      setToast({ message: "Aviso creado", type: "success" })
+    setLoading(true)
+    try {
+      if (editingAviso) {
+        const ref = doc(db, "avisos", editingAviso.id)
+        await updateDoc(ref, formData)
+        setAvisos(avisos.map(a => (a.id === editingAviso.id ? { ...a, ...formData } : a)))
+        setToast({ message: "Aviso actualizado", type: "success" })
+      } else {
+        const ref = await addDoc(collection(db, "avisos"), formData)
+        setAvisos([...avisos, { id: ref.id, ...formData }])
+        setToast({ message: "Aviso creado", type: "success" })
+      }
+      setIsModalOpen(false)
+    } catch (error) {
+      console.error(error)
+      setToast({ message: "Error al guardar aviso", type: "error" })
     }
-    setIsModalOpen(false)
+    setLoading(false)
   }
 
-  const handleDelete = (id) => {
-    setAvisos(avisos.filter((a) => a.id !== id))
-    setToast({ message: "Aviso eliminado", type: "success" })
+  const handleDelete = async (id) => {
+    try {
+      const ref = doc(db, "avisos", id)
+      await deleteDoc(ref)
+      setAvisos(avisos.filter(a => a.id !== id))
+      setToast({ message: "Aviso eliminado", type: "success" })
+    } catch (error) {
+      console.error(error)
+      setToast({ message: "Error al eliminar aviso", type: "error" })
+    }
   }
 
   const getPriorityVariant = (priority) => {
@@ -78,26 +111,30 @@ export default function AvisosPage() {
       </div>
 
       <Table columns={["ID", "Título", "Mensaje", "Prioridad", "Acciones"]} loading={loading}>
-        {avisos.map((aviso) => (
-          <tr key={aviso.id} className="hover:bg-muted/50">
-            <td className="px-4 py-3 text-sm">{aviso.id}</td>
-            <td className="px-4 py-3 text-sm font-medium">{aviso.title}</td>
-            <td className="px-4 py-3 text-sm text-muted-foreground">{aviso.message}</td>
-            <td className="px-4 py-3">
-              <Badge variant={getPriorityVariant(aviso.priority)}>{aviso.priority}</Badge>
-            </td>
-            <td className="px-4 py-3">
-              <div className="flex gap-2">
-                <Button variant="ghost" size="sm" onClick={() => handleOpenModal(aviso)}>
-                  Editar
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => handleDelete(aviso.id)}>
-                  Eliminar
-                </Button>
-              </div>
+        {avisos.length === 0 ? (
+          <tr>
+            <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+              No hay avisos registrados
             </td>
           </tr>
-        ))}
+        ) : (
+          avisos.map((aviso) => (
+            <tr key={aviso.id} className="hover:bg-muted/50">
+              <td className="px-4 py-3 text-sm">{aviso.id.slice(0, 8)}</td>
+              <td className="px-4 py-3 text-sm font-medium">{aviso.title}</td>
+              <td className="px-4 py-3 text-sm text-muted-foreground">{aviso.message}</td>
+              <td className="px-4 py-3">
+                <Badge variant={getPriorityVariant(aviso.priority)}>{aviso.priority}</Badge>
+              </td>
+              <td className="px-4 py-3">
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => handleOpenModal(aviso)}>Editar</Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleDelete(aviso.id)}>Eliminar</Button>
+                </div>
+              </td>
+            </tr>
+          ))
+        )}
       </Table>
 
       <Modal
@@ -138,9 +175,7 @@ export default function AvisosPage() {
             </select>
           </div>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
-              Cancelar
-            </Button>
+            <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
             <Button type="submit">Guardar</Button>
           </div>
         </form>

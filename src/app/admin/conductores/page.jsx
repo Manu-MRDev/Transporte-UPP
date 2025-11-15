@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Table } from "@/components/Table"
 import { Modal } from "@/components/Modal"
 import { Switch } from "@/components/ui/switch"
@@ -9,12 +9,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
+import { db } from "@/lib/firebase"
+import { collection, getDocs, addDoc, updateDoc, doc } from "firebase/firestore"
+
 export default function ConductoresPage() {
-  const [conductores, setConductores] = useState([
-    { id: "1", name: "Juan Pérez", phone: "555-0001", combiId: "ABC-123", isActive: true },
-    { id: "2", name: "María García", phone: "555-0002", combiId: "DEF-456", isActive: true },
-    { id: "3", name: "Carlos López", phone: "555-0003", combiId: "GHI-789", isActive: false },
-  ])
+  const [conductores, setConductores] = useState([])
   const [loading, setLoading] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingConductor, setEditingConductor] = useState(null)
@@ -26,6 +25,23 @@ export default function ConductoresPage() {
     combiId: "",
     isActive: true,
   })
+
+  // 🔥 Cargar conductores desde Firestore
+  useEffect(() => {
+    async function loadConductores() {
+      setLoading(true)
+      try {
+        const snapshot = await getDocs(collection(db, "drivers"))
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        setConductores(data)
+      } catch (error) {
+        console.error(error)
+        setToast({ message: "Error cargando conductores", type: "error" })
+      }
+      setLoading(false)
+    }
+    loadConductores()
+  }, [])
 
   const handleOpenModal = (conductor) => {
     if (conductor) {
@@ -43,24 +59,41 @@ export default function ConductoresPage() {
     setIsModalOpen(true)
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    if (editingConductor) {
-      setConductores(conductores.map((c) => (c.id === editingConductor.id ? { ...c, ...formData } : c)))
-      setToast({ message: "Conductor actualizado", type: "success" })
-    } else {
-      setConductores([...conductores, { id: Date.now().toString(), ...formData }])
-      setToast({ message: "Conductor creado", type: "success" })
+    setLoading(true)
+    try {
+      if (editingConductor) {
+        const ref = doc(db, "drivers", editingConductor.id)
+        await updateDoc(ref, formData)
+        setConductores(conductores.map(c => (c.id === editingConductor.id ? { ...c, ...formData } : c)))
+        setToast({ message: "Conductor actualizado", type: "success" })
+      } else {
+        const ref = await addDoc(collection(db, "drivers"), formData)
+        setConductores([...conductores, { id: ref.id, ...formData }])
+        setToast({ message: "Conductor creado", type: "success" })
+      }
+      setIsModalOpen(false)
+    } catch (error) {
+      console.error(error)
+      setToast({ message: "Error al guardar conductor", type: "error" })
     }
-    setIsModalOpen(false)
+    setLoading(false)
   }
 
-  const handleToggleActive = (conductor) => {
-    setConductores(conductores.map((c) => (c.id === conductor.id ? { ...c, isActive: !c.isActive } : c)))
-    setToast({
-      message: `Conductor ${!conductor.isActive ? "activado" : "desactivado"}`,
-      type: "success",
-    })
+  const handleToggleActive = async (conductor) => {
+    try {
+      const ref = doc(db, "drivers", conductor.id)
+      await updateDoc(ref, { isActive: !conductor.isActive })
+      setConductores(conductores.map(c => (c.id === conductor.id ? { ...c, isActive: !c.isActive } : c)))
+      setToast({
+        message: `Conductor ${!conductor.isActive ? "activado" : "desactivado"}`,
+        type: "success",
+      })
+    } catch (error) {
+      console.error(error)
+      setToast({ message: "Error al actualizar conductor", type: "error" })
+    }
   }
 
   return (
@@ -71,22 +104,30 @@ export default function ConductoresPage() {
       </div>
 
       <Table columns={["ID", "Nombre", "Teléfono", "Combi Asignada", "Activo", "Acciones"]} loading={loading}>
-        {conductores.map((conductor) => (
-          <tr key={conductor.id} className="hover:bg-muted/50">
-            <td className="px-4 py-3 text-sm">{conductor.id}</td>
-            <td className="px-4 py-3 text-sm font-medium">{conductor.name}</td>
-            <td className="px-4 py-3 text-sm">{conductor.phone}</td>
-            <td className="px-4 py-3 text-sm">{conductor.combiId}</td>
-            <td className="px-4 py-3">
-              <Switch checked={conductor.isActive} onChange={() => handleToggleActive(conductor)} />
-            </td>
-            <td className="px-4 py-3">
-              <Button variant="ghost" size="sm" onClick={() => handleOpenModal(conductor)}>
-                Editar
-              </Button>
+        {conductores.length === 0 ? (
+          <tr>
+            <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+              No hay conductores registrados
             </td>
           </tr>
-        ))}
+        ) : (
+          conductores.map((conductor) => (
+            <tr key={conductor.id} className="hover:bg-muted/50">
+              <td className="px-4 py-3 text-sm">{conductor.id.slice(0, 8)}</td>
+              <td className="px-4 py-3 text-sm font-medium">{conductor.name}</td>
+              <td className="px-4 py-3 text-sm">{conductor.phone}</td>
+              <td className="px-4 py-3 text-sm">{conductor.combiId}</td>
+              <td className="px-4 py-3">
+                <Switch checked={conductor.isActive} onChange={() => handleToggleActive(conductor)} />
+              </td>
+              <td className="px-4 py-3">
+                <Button variant="ghost" size="sm" onClick={() => handleOpenModal(conductor)}>
+                  Editar
+                </Button>
+              </td>
+            </tr>
+          ))
+        )}
       </Table>
 
       <Modal
@@ -142,3 +183,4 @@ export default function ConductoresPage() {
     </div>
   )
 }
+

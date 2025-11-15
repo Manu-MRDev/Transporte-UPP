@@ -11,7 +11,6 @@ const navItems = [
   { href: "/admin/rutas", icon: Map, label: "Rutas" },
   { href: "/admin/combis", icon: Bus, label: "Combis" },
   { href: "/admin/horarios", icon: Clock, label: "Horarios" },
-  { href: "/admin/paradas", icon: MapPin, label: "Paradas" },
   { href: "/admin/conductores", icon: Users, label: "Conductores" },
   { href: "/admin/avisos", icon: MessageSquare, label: "Avisos" },
 ]
