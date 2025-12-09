@@ -38,7 +38,7 @@ export default function AdminPage() {
   const cards = [
     { title: "Combis Activas", value: stats.combisActivas, icon: Bus, color: "text-blue-500" },
     { title: "Rutas", value: stats.totalRutas, icon: Map, color: "text-purple-500" },
-    { title: "Reglas de Horario", value: stats.totalHorarios, icon: Clock, color: "text-orange-500" },
+    //{ title: "Reglas de Horario", value: stats.totalHorarios, icon: Clock, color: "text-orange-500" },
   ]
 
   return (
